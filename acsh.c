@@ -10,6 +10,8 @@ void main_loop() {
   char *line;
   char **args;
   int status;
+
+  signal(SIGINT, SIG_IGN);
   do {
     printf("%s> ", SHELL);
     line = fetch_line();
@@ -22,28 +24,22 @@ void main_loop() {
 }
 
 char *fetch_line() {
-  char *input = NULL;
-  size_t buffer;
+  // Read line from stdin
+  char *line = NULL;
+  size_t buffer, size;
 
-  if (getline(&input, &buffer, stdin) == -1) {
-    if (feof(stdin)) {
-      exit(EXIT_SUCCESS);
-    } else {
-      perror("readline");
-      exit(EXIT_FAILURE);
-    }
-  }
+  buffer = getline(&line, &size, stdin);
 
-  return input;
+  return line;
 }
 
 char **split_line(char *line) {
-
   int bufsize = BUFSIZE, position = 0;
   char *delimiters = " \t\n\r\a";
   char **tokens = malloc(sizeof(char *) * bufsize);
   char *token;
 
+  // Split line into tokens
   if (!tokens) {
     fprintf(stderr, "%s: allocation error", SHELL);
     exit(EXIT_FAILURE);
@@ -53,16 +49,15 @@ char **split_line(char *line) {
   while (token != NULL) {
     tokens[position] = token;
     ++position;
+
     if (position >= bufsize) {
       bufsize += BUFSIZE;
-      tokens = realloc(tokens, bufsize * sizeof(char *));
+      tokens = realloc(tokens, sizeof(char *) * bufsize);
 
       if (!tokens) {
         fprintf(stderr, "%s: allocation error", SHELL);
-        exit(EXIT_FAILURE);
       }
     }
-
     token = strtok(NULL, delimiters);
   }
 
@@ -74,6 +69,7 @@ int launch_program(char **args) {
   int status;
   pid = fork();
   if (pid == 0) {
+    signal(SIGINT, SIG_DFL);
     if (execvp(args[0], args) == -1) {
       perror(SHELL);
     }
