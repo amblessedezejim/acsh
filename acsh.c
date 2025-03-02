@@ -1,4 +1,4 @@
-#include "acsh.h"
+#include "lib/acsh.h"
 
 int main(int argc, char **argv) {
   // Start program in main loop
@@ -10,16 +10,24 @@ void main_loop() {
   char *line;
   char **args;
   int status;
+  int numtokens;
 
   signal(SIGINT, SIG_IGN);
   do {
     printf("%s> ", SHELL);
     line = fetch_line();
-    args = split_line(line);
-    status = execute_cmd(args);
+    char **args;
+    if ((numtokens = split_line(line, &args)) > 0) {
+      status = execute_cmd(args);
+      free(args);
+    } else if (numtokens == 0) {
+      status = 1;
+      continue;
+    } else {
+      exit(EXIT_FAILURE);
+    }
 
     free(line);
-    free(args);
   } while (status);
 }
 
@@ -33,35 +41,44 @@ char *fetch_line() {
   return line;
 }
 
-char **split_line(char *line) {
-  int bufsize = BUFSIZE, position = 0;
+int split_line(char *line, char ***tokens) {
   char *delimiters = " \t\n\r\a";
-  char **tokens = malloc(sizeof(char *) * bufsize);
   char *token;
+  int numtokens;
 
+  if (tokens == NULL) {
+    errno = EINVAL;
+    fprintf(stderr, "%s: Invalid pointer for args passed\n", SHELL);
+    return -1;
+  }
   // Split line into tokens
-  if (!tokens) {
+
+  /* count the number of tokens in line */
+  char *dup = strdup(line);
+  numtokens = 0;
+  if (strtok(dup, delimiters) != NULL)
+    for (numtokens = 1; strtok(NULL, delimiters) != NULL; ++numtokens)
+      ;
+  free(dup);
+
+  *tokens = malloc(sizeof(char *) * (numtokens + 1));
+  if (!(*tokens)) {
     fprintf(stderr, "%s: allocation error", SHELL);
-    exit(EXIT_FAILURE);
+    perror(SHELL);
+    return -1;
   }
 
-  token = strtok(line, delimiters);
-  while (token != NULL) {
-    tokens[position] = token;
-    ++position;
-
-    if (position >= bufsize) {
-      bufsize += BUFSIZE;
-      tokens = realloc(tokens, sizeof(char *) * bufsize);
-
-      if (!tokens) {
-        fprintf(stderr, "%s: allocation error", SHELL);
-      }
-    }
-    token = strtok(NULL, delimiters);
+  if (numtokens == 0) {
+    free(*tokens);
+    return 0;
+  } else {
+    *(*tokens) = strtok(line, delimiters);
+    for (int i = 1; i < numtokens; ++i)
+      *(*(tokens) + i) = strtok(NULL, delimiters);
   }
+  (*tokens)[numtokens] = NULL;
 
-  return tokens;
+  return numtokens;
 }
 
 int launch_program(char **args) {
@@ -97,12 +114,18 @@ int (*builtin_func[])(char **) = {
 int shell_num_builtins() { return sizeof(builtin_str) / sizeof(char *); }
 
 int shell_cd(char **args) {
+  const char *path;
   if (args[1] == NULL) {
-    fprintf(stderr, "%s: expected arguments to \"cd\"\n", SHELL);
-  } else {
-    if (chdir(args[1]) != 0) {
-      perror(SHELL);
+    // Set path as user home directory if no path is provided
+    if ((path = getenv("HOME")) == NULL) {
+      path = getpwuid(getuid())->pw_dir;
     }
+  } else {
+    path = args[1];
+  }
+
+  if (chdir(path) != 0) {
+    perror(SHELL);
   }
   return 1;
 }

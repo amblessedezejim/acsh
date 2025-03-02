@@ -1,4 +1,10 @@
+#ifndef _ASCH_H
+#define _ASCH_H 1
+
+#include <errno.h>
+#include <fcntl.h>
 #include <linux/limits.h>
+#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,8 +21,15 @@ void main_loop(void);
 // Reads line from stdin
 char *fetch_line(void);
 
-// Split line returned from readline
-char **split_line(char *line);
+/* Split line into tokens stored in args
+
+On success: Returns number of tokens
+
+On Failure: Returns -1
+
+Returns 0 if line is empty
+*/
+int split_line(char *line, char ***args);
 
 // Runs commands and return status
 int execute_cmd(char **args);
@@ -35,3 +48,7 @@ int shell_exit(char **args);
 
 // Display currently working directory
 int shell_pwd(char **args);
+
+// Handles signals
+void signal_handler(int signo);
+#endif /* ASCH_H */
