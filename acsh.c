@@ -11,10 +11,19 @@ void main_loop() {
   char **args;
   int status;
   int numtokens;
+  shell_state state;
+  state.shell = SHELL;
+  state.prompt = "username@hostname";
+
+  // Get present working directory
+  if (getcwd(state.pwd, PATH_MAX) == NULL) {
+    perror(SHELL);
+    exit(EXIT_FAILURE);
+  }
 
   signal(SIGINT, SIG_IGN);
   do {
-    printf("%s> ", SHELL);
+    printf("%s (%s)> ", state.prompt, state.pwd);
     line = fetch_line();
     char **args;
     if ((numtokens = split_line(line, &args)) > 0) {
@@ -88,7 +97,7 @@ int launch_program(char **args) {
   if (pid == 0) {
     signal(SIGINT, SIG_DFL);
     if (execvp(args[0], args) == -1) {
-      perror(SHELL);
+      fprintf(stderr, "%s: command not found: %s\n", SHELL, args[0]);
     }
     exit(EXIT_FAILURE);
   } else if (pid < 0) {
@@ -102,15 +111,13 @@ int launch_program(char **args) {
   return 1;
 }
 
-char *builtin_str[] = {"cd", "help", "exit", "pwd"};
+char *builtin_str[] = {"cd", "help", "exit", "pwd", "which"};
 
 int (*builtin_func[])(char **) = {
-    &shell_cd,
-    &shell_help,
-    &shell_exit,
-    &shell_pwd,
+    &shell_cd, &shell_help, &shell_exit, &shell_pwd, &shell_which,
 };
 
+// Return number of shell builtin commands
 int shell_num_builtins() { return sizeof(builtin_str) / sizeof(char *); }
 
 int shell_cd(char **args) {
@@ -153,6 +160,29 @@ int shell_pwd(char **args) {
   }
 
   return 1;
+}
+
+int shell_which(char **args) {
+  int i;
+  const char *command;
+  int status;
+
+  if (args[1] == NULL) {
+    fprintf(stderr, "%s: Usage of which: which <command>\n", SHELL);
+    return 1;
+  }
+
+  for (i = 0; i < shell_num_builtins(); ++i) {
+    if (strcmp(args[1], builtin_str[i]) == 0) {
+      printf("%s: shell built-in command", args[1]);
+      return 1;
+    }
+  }
+
+  // Call the default which command if argument 1 (command to search for) is not
+  // a shell builtin command
+  status = launch_program(args);
+  return status;
 }
 
 int shell_exit(char **args) { return 0; }
